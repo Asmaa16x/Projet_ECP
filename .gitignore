@@ -1,0 +1,5 @@
+# Données lourdes
+data/
+
+# Fichiers système
+.DS_Store
