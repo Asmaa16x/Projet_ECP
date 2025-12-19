@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import joblib
 import os
+import time
 
 # Configuration
-st.set_page_config(page_title="IDS Dashboard Pro", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="IDS Dashboard Pro", layout="wide")
 
 # 1. DÉFINITION DES COLONNES (Indispensable)
 features = ['same_srv_rate', 'logged_in', 'dst_host_srv_count', 'flag', 
@@ -31,9 +32,9 @@ def load_assets():
 
 model, scaler = load_assets()
 
-st.title("🛡️ Network Intrusion Detection System")
+st.title(" Network Intrusion Detection System")
 
-tab1, tab2 = st.tabs(["📝 Saisie Manuelle", "📁 Analyse de Fichier (CSV)"])
+tab1, tab2 = st.tabs([" Saisie Manuelle", " Analyse de Fichier (CSV)"])
 
 # --- ONGLET 1 : SAISIE MANUELLE ---
 with tab1:
@@ -44,7 +45,7 @@ with tab1:
         with col1 if i % 2 == 0 else col2:
             inputs[feat] = st.number_input(f"{feat}", value=0.0, key=f"manual_{feat}")
 
-    if st.button("🔍 Analyser la trame"):
+    if st.button(" Analyser la trame"):
         input_df = pd.DataFrame([inputs])
         
         # --- CORRECTION : AJOUT DU SCALING ---
@@ -52,9 +53,9 @@ with tab1:
         prediction = model.predict(input_scaled)
         
         if prediction[0] == 1:
-            st.error("🚨 ALERTE : INTRUSION DÉTECTÉE")
+            st.error(" ALERTE : INTRUSION DÉTECTÉE")
         else:
-            st.success("✅ TRAFIC NORMAL")
+            st.success(" TRAFIC NORMAL")
 
 # --- ONGLET 2 : ANALYSE CSV ---
 with tab2:
@@ -71,7 +72,7 @@ with tab2:
             df_scaled = scaler.transform(df_to_predict)
             predictions = model.predict(df_scaled)
             
-            data['Résultat'] = ["🚨 Attaque" if p == 1 else "✅ Normal" for p in predictions]
+            data['Résultat'] = ["Attaque" if p == 1 else " Normal" for p in predictions]
             
             st.write(f"Analyse de {len(data)} lignes terminée :")
             st.dataframe(data)
@@ -81,3 +82,42 @@ with tab2:
                       delta=f"{nb_attaques/len(data)*100:.1f}% du trafic", delta_color="inverse")
         else:
             st.warning(f"Le fichier doit contenir les colonnes suivantes : {features}")
+
+# --- ONGLET 3 : MONITORING PACKET TRACER (V3) ---
+with st.tabs([" Saisie Manuelle", " Analyse de Fichier (CSV)", " 📡 Live IDS (Packet Tracer)"])[2]:
+    st.subheader("Surveillance du trafic en temps réel")
+    
+    LIVE_DATA_FILE = "data/live_traffic.csv"
+    placeholder = st.empty()
+    stop_live = st.checkbox("Arrêter la surveillance en direct")
+
+    if not stop_live:
+        while True:
+            if os.path.exists(LIVE_DATA_FILE):
+                try:
+                    df_live = pd.read_csv(LIVE_DATA_FILE)
+                    
+                    with placeholder.container():
+                        st.info(f"Dernière mise à jour : {time.strftime('%H:%M:%S')}")
+                        
+                        # --- CORRECTION ICI : .copy() pour éviter le Warning ---
+                        recent_data = df_live.tail(10).copy()
+                        
+                        if all(col in recent_data.columns for col in features):
+                            df_scaled_live = scaler.transform(recent_data[features])
+                            preds_live = model.predict(df_scaled_live)
+                            
+                            # --- CORRECTION ICI : .loc pour éviter le Warning ---
+                            recent_data.loc[:, 'Analyse IA'] = [" ATTAQUE" if p == 1 else " NORMAL" for p in preds_live]
+                        
+                        # --- MISE À JOUR ICI : width="stretch" ---
+                        st.dataframe(recent_data, width="stretch")
+                        
+                        if not recent_data.empty and " ATTAQUE" in recent_data.iloc[-1]['Analyse IA']:
+                            st.error(" INTRUSION DÉTECTÉE EN DIRECT SUR LE RÉSEAU !")
+                            st.toast("Alerte Sécurité : Activité suspecte")
+                except Exception as e:
+                    st.warning("Chargement des données...")
+            
+            time.sleep(1)
+            if stop_live: break
